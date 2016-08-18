@@ -1,7 +1,9 @@
 #include <piga/daemon/Daemon.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/bind.hpp>
+#include <boost/filesystem.hpp>
 #include <functional>
+#include <fstream>
 
 #include <libconfig.h++>
 #include <iostream>
@@ -19,17 +21,56 @@ namespace daemon
 
 namespace as = ::boost::asio;
 
-Daemon::Daemon()
+Daemon::Daemon(char **envp)
     : m_io_service(std::make_shared<as::io_service>()),
       m_work(std::make_shared<as::io_service::work>(*m_io_service)),
-      m_signals(*m_io_service, SIGINT, SIGHUP)
+      m_signals(*m_io_service, SIGINT, SIGHUP, SIGUSR1),
+      m_envp(envp)
 {
     m_signals.async_wait(boost::bind(&Daemon::signalHandler, this, _1, _2));
+
+    // Try to write the pidfile.
+    pid_t pid = getpid();
+    std::ofstream pidfile;
+    pidfile.open(PIGA_DAEMON_PIDFILE_PATH, std::ios::trunc | std::ios::out);
+    if(pidfile.is_open()) {
+		pidfile << pid;
+		pidfile.close();
+        setenv("PIGA_DAEMON_PIDFILE_PATH", PIGA_DAEMON_PIDFILE_PATH, 1);
+    } else {
+        std::string path = boost::filesystem::current_path().string();
+		BOOST_LOG_TRIVIAL(error) << "Could not create pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights?";
+        path += "/.pigadaemon.pid";
+        BOOST_LOG_TRIVIAL(info) << "Creating local pidfile and setting he envvar PIGA_DAEMON_PIDFILE_PATH to " << path;
+
+		pidfile.open(path, std::ios::trunc | std::ios::out);
+		if(pidfile.is_open()) {
+			setenv("PIGA_DAEMON_PIDFILE_PATH", path.c_str(), 1);
+			pidfile << pid;
+            pidfile.close();
+        } else {
+            BOOST_LOG_TRIVIAL(error) << "The local pidfile in \"" << path << "\" could not be opened!";
+        }
+    }
 }
 
 Daemon::~Daemon()
 {
     BOOST_LOG_TRIVIAL(info) << "Shutting down pigadaemon.";
+    // Remove the pidfile.
+    std::remove(PIGA_DAEMON_PIDFILE_PATH);
+    bool removed = !std::ifstream(PIGA_DAEMON_PIDFILE_PATH);
+    if(!removed) {
+		BOOST_LOG_TRIVIAL(error) << "Could not remove pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights? - Trying local pidfile.";
+		std::remove(getenv("PIGA_DAEMON_PIDFILE_PATH"));
+		bool removed = !std::ifstream(getenv("PIGA_DAEMON_PIDFILE_PATH"));
+        if(!removed) {
+            BOOST_LOG_TRIVIAL(error) << "Could not remove pidfile in \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\". Was it created?";
+        }
+    }
+    // Unset the environment variable.
+    BOOST_LOG_TRIVIAL(debug) << "Clearing envvar PIGA_DAEMON_PIDFILE_PATH, which had the content \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\"";	
+	unsetenv("PIGA_DAEMON_PIDFILE_PATH");
 }
 
 void Daemon::run()
@@ -57,7 +98,7 @@ void Daemon::run()
 
     m_loader->reload();
 
-    m_appManager = std::unique_ptr<AppManager>(new AppManager(m_defaultAppPath, m_defaultUID));
+    m_appManager = std::unique_ptr<AppManager>(new AppManager(m_defaultAppPath, m_defaultUID, m_envp));
     m_appManager->reload(m_defaultAppPath);
 
     // Host loaded. Now load the client for the daemon.
@@ -191,6 +232,11 @@ void Daemon::signalHandler(const boost::system::error_code &code, int signal_num
         case SIGHUP:
             reload();
             break;
+        case SIGUSR1:
+            // This signal means, that the app processing should continue.
+            BOOST_LOG_TRIVIAL(info) << "Received a SIGUSR1, this means the daemon continues processing the apps now.";
+            m_appManager->processApps();
+            break;
     }
     m_signals.async_wait(boost::bind(&Daemon::signalHandler, this, _1, _2));
 }
@@ -221,6 +267,8 @@ void Daemon::update()
                 case PIGA_EVENT_GAME_INPUT:
                     break;
                 case PIGA_EVENT_APP_INSTALLED:
+                    break;
+                case PIGA_EVENT_UNKNOWN:
                     break;
             }
         }

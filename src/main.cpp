@@ -8,7 +8,7 @@ using std::endl;
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[], char** envp)
 {
     BOOST_LOG_TRIVIAL(info) << "Starting up pigadaemon.";
 
@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    Daemon daemon;
+    Daemon daemon(envp);
     daemon.run();
 
     return 0;

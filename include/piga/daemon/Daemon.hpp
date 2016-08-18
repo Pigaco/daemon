@@ -12,6 +12,8 @@
 #include <piga/daemon/Loader.hpp>
 #include <piga/daemon/AppManager.hpp>
 
+#define PIGA_DAEMON_PIDFILE_PATH "/etc/piga/proc/daemon.pid"
+
 namespace piga
 {
 namespace daemon
@@ -19,7 +21,7 @@ namespace daemon
 class Daemon
 {
 public:
-    Daemon();
+    Daemon(char **envp);
     ~Daemon();
 
     void run();
@@ -28,6 +30,11 @@ public:
 
     void signalHandler(const boost::system::error_code &code, int signal_number);
     void update();
+
+    static const char* getPidfilePath() {
+        return getenv("PIGA_DAEMON_PIDFILE_PATH");
+    }
+
 private:
     std::unique_ptr<Loader> m_loader;
     std::unique_ptr<AppManager> m_appManager;
@@ -46,6 +53,7 @@ private:
     std::shared_ptr<piga_host> m_host;
     std::shared_ptr<piga_client> m_client;
     std::shared_ptr<piga_event> m_cacheEvent;
+    char **m_envp;
 };
 }
 }

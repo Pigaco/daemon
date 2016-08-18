@@ -2,7 +2,6 @@ project(piga-daemon)
 cmake_minimum_required(VERSION 3.0.1)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-include(cotire)
 
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
@@ -34,8 +33,22 @@ set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 
 add_library(piga_daemon SHARED ${HDRS} ${SRCS})
 
+export(TARGETS piga_daemon FILE PigaDaemonConfig.cmake)
+
+install(TARGETS piga_daemon
+    EXPORT PigaDaemonConfig
+    ARCHIVE  DESTINATION lib
+    LIBRARY  DESTINATION lib
+    RUNTIME  DESTINATION bin)  # This is for Windows
+install(DIRECTORY include/ DESTINATION include)
+install(EXPORT PigaDaemonConfig DESTINATION lib/cmake)
+
+target_compile_features(piga_daemon PRIVATE cxx_nullptr)
+
 add_executable(pigadaemon
     ${SRC}/main.cpp)
+
+target_compile_features(pigadaemon PRIVATE cxx_nullptr)
 
 target_link_libraries(pigadaemon piga_daemon)
 
@@ -72,7 +85,3 @@ if(${Piga_FOUND})
     target_link_libraries(piga_daemon ${PIGA_COMMON_LIBRARY} ${PIGA_SERVER_LIBRARY} ${PIGA_CLIENT_LIBRARY})
     include_directories(${PIGA_INCLUDE_DIRS})
 endif()
-
-cotire(piga_daemon)
-cotire(pigadaemon)
-
