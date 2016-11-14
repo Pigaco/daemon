@@ -99,7 +99,7 @@ bool App::loadConfigFile(const std::string &configPath)
             BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't have an executable. It can therefore not be executed.";
 
         try {
-            Setting &args = execution.lookup("arguments");
+            Setting &args = execution["arguments"];
             m_args.resize(args.getLength() + 1);
             std::size_t i = 1;
             for(std::size_t i = 0; i < args.getLength(); ++i) {
