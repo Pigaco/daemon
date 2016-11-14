@@ -102,8 +102,8 @@ bool App::loadConfigFile(const std::string &configPath)
             Setting &args = execution.lookup("arguments");
             m_args.resize(args.getLength() + 1);
             std::size_t i = 1;
-            for(auto &arg : args) {
-                m_args[i] = *arg;
+            for(std::size_t i = 0; i < args.getLength(); ++i) {
+                m_args[i] = *(args[i]);
                 ++i;
             }
         }
