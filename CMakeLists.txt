@@ -43,14 +43,14 @@ install(TARGETS piga_daemon
 install(DIRECTORY include/ DESTINATION include)
 install(EXPORT PigaDaemonConfig DESTINATION lib/cmake)
 
-target_compile_features(piga_daemon PRIVATE cxx_nullptr)
+# Install the service file.
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION etc/systemd/system/)
 
 add_executable(pigadaemon
     ${SRC}/main.cpp)
 
-target_compile_features(pigadaemon PRIVATE cxx_nullptr)
-
 target_link_libraries(pigadaemon piga_daemon)
+set_property(TARGET pigadaemon PROPERTY COMPILE_FLAGS "-std=c++11")
 
 target_include_directories(piga_daemon PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -85,3 +85,19 @@ if(${Piga_FOUND})
     target_link_libraries(piga_daemon ${PIGA_COMMON_LIBRARY} ${PIGA_SERVER_LIBRARY} ${PIGA_CLIENT_LIBRARY})
     include_directories(${PIGA_INCLUDE_DIRS})
 endif()
+
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The main daemon that starts and stops applications, loads host files and listens for inputs in the piga system.")
+set(CPACK_PACKAGE_VENDOR "Pigaco")
+set(CPACK_PACKAGE_VERSION_MAJOR ${DAEMON_VERSION_MAJOR})
+set(CPACK_PACKAGE_VERSION_MINOR ${DAEMON_VERSION_MINOR})
+set(CPACK_PACKAGE_VERSION_PATCH ${DAEMON_VERSION_PATCH})
+set(CPACK_PACKAGE_VERSION_TWEAK ${DAEMON_VERSION_TWEAK})
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "http://pigaco.net/pages/pigadaemon.html")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "piga-libpiga (>= 0.9.4), libconfig++9 (>= 1.4.9), libboost-system1.55.0, libboost-filesystem1.55.0, libboost-program-options1.55.0, libboost-serialization1.55.0, libboost-log1.55.0")
+set(CPACK_PACKAGE_NAME "piga-daemon")
+set(CPACK_GENERATOR "DEB")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Max Heisinger <mail@maximaximal.com>")
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/piga-daemon.service.in ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service)
+
+include(CPack)

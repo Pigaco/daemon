@@ -1,0 +1,12 @@
+[Unit]
+Description=@CPACK_PACKAGE_DESCRIPTION_SUMMARY@
+Documentation=@CPACK_DEBIAN_PACKAGE_HOMEPAGE@
+
+[Service]
+Type=simple
+TimeoutStartSec=0
+ExecStart=/usr/bin/pigadaemon
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
