@@ -1,4 +1,4 @@
-project(piga-daemon)
+project(piga-daemon C CXX)
 cmake_minimum_required(VERSION 3.0.1)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
 set(DAEMON_VERSION_MINOR "8" CACHE STRING "Minor-Version")
-set(DAEMON_VERSION_PATCH "1" CACHE STRING "Patch-Version")
+set(DAEMON_VERSION_PATCH "2" CACHE STRING "Patch-Version")
 set(DAEMON_VERSION_TWEAK "0" CACHE STRING "Tweak-Version")
 set(DAEMON_VERSION_BUILD "0" CACHE STRING "Build")
 set(DAEMON_VERSION ${DAEMON_VERSION_MAJOR}.${DAEMON_VERSION_MINOR}.${DAEMON_VERSION_PATCH}.${DAEMON_VERSION_TWEAK}:${DAEMON_VERSION_BUILD})
@@ -50,7 +50,18 @@ add_executable(pigadaemon
     ${SRC}/main.cpp)
 
 target_link_libraries(pigadaemon piga_daemon)
-set_property(TARGET pigadaemon PROPERTY COMPILE_FLAGS "-std=c++11")
+
+# http://stackoverflow.com/a/25836953 (Backwards compatible C++11 declaration.)
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+elseif(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+else()
+        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
 
 target_include_directories(piga_daemon PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -66,10 +77,7 @@ endif()
 
 find_package(Threads REQUIRED)
 target_link_libraries(piga_daemon ${CMAKE_THREADS_LIBS_INIT})
-if(CMAKE_USE_PTHREADS_INIT)
-    set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-lpthread")
-    set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-pthread")
-endif()
+target_link_libraries(piga_daemon pthread)
 
 find_package(Config++ REQUIRED)
 target_link_libraries(piga_daemon ${CONFIG++_LIBRARY})
