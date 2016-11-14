@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
 set(DAEMON_VERSION_MINOR "8" CACHE STRING "Minor-Version")
-set(DAEMON_VERSION_PATCH "7" CACHE STRING "Patch-Version")
+set(DAEMON_VERSION_PATCH "8" CACHE STRING "Patch-Version")
 set(DAEMON_VERSION_TWEAK "0" CACHE STRING "Tweak-Version")
 set(DAEMON_VERSION_BUILD "0" CACHE STRING "Build")
 set(DAEMON_VERSION ${DAEMON_VERSION_MAJOR}.${DAEMON_VERSION_MINOR}.${DAEMON_VERSION_PATCH}.${DAEMON_VERSION_TWEAK}:${DAEMON_VERSION_BUILD})
@@ -48,6 +48,12 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION /etc/s
 
 add_executable(pigadaemon
     ${SRC}/main.cpp)
+    
+install(TARGETS pigadaemon
+    EXPORT PigaDaemonConfig
+    ARCHIVE  DESTINATION lib
+    LIBRARY  DESTINATION lib
+    RUNTIME  DESTINATION bin)  # This is for Windows
 
 target_link_libraries(pigadaemon piga_daemon)
 
