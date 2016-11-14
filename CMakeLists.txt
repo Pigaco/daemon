@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
 set(DAEMON_VERSION_MINOR "8" CACHE STRING "Minor-Version")
-set(DAEMON_VERSION_PATCH "3" CACHE STRING "Patch-Version")
+set(DAEMON_VERSION_PATCH "4" CACHE STRING "Patch-Version")
 set(DAEMON_VERSION_TWEAK "0" CACHE STRING "Tweak-Version")
 set(DAEMON_VERSION_BUILD "0" CACHE STRING "Build")
 set(DAEMON_VERSION ${DAEMON_VERSION_MAJOR}.${DAEMON_VERSION_MINOR}.${DAEMON_VERSION_PATCH}.${DAEMON_VERSION_TWEAK}:${DAEMON_VERSION_BUILD})
@@ -78,6 +78,8 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(piga_daemon ${CMAKE_THREADS_LIBS_INIT})
 target_link_libraries(piga_daemon pthread)
+
+target_link_libraries(piga_daemon ${CMAKE_DL_LIBS})
 
 find_package(Config++ REQUIRED)
 target_link_libraries(piga_daemon ${CONFIG++_LIBRARY})
