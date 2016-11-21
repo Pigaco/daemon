@@ -5,9 +5,9 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
-set(DAEMON_VERSION_MINOR "8" CACHE STRING "Minor-Version")
-set(DAEMON_VERSION_PATCH "8" CACHE STRING "Patch-Version")
-set(DAEMON_VERSION_TWEAK "1" CACHE STRING "Tweak-Version")
+set(DAEMON_VERSION_MINOR "9" CACHE STRING "Minor-Version")
+set(DAEMON_VERSION_PATCH "0" CACHE STRING "Patch-Version")
+set(DAEMON_VERSION_TWEAK "0" CACHE STRING "Tweak-Version")
 set(DAEMON_VERSION_BUILD "0" CACHE STRING "Build")
 set(DAEMON_VERSION ${DAEMON_VERSION_MAJOR}.${DAEMON_VERSION_MINOR}.${DAEMON_VERSION_PATCH}.${DAEMON_VERSION_TWEAK}:${DAEMON_VERSION_BUILD})
 
@@ -20,6 +20,8 @@ set(HDRS
     ${HDR}/Loader.hpp
     ${HDR}/App.hpp
     ${HDR}/AppManager.hpp
+    ${HDR}/PluginManager.hpp
+    ${HDR}/DBusManager.hpp
 )
 set(SRCS
     ${SRC}/Daemon.cpp
@@ -27,6 +29,8 @@ set(SRCS
     ${SRC}/Loader.cpp
     ${SRC}/App.cpp
     ${SRC}/AppManager.cpp
+    ${SRC}/PluginManager.cpp
+    ${SRC}/DBusManager.cpp
 )
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
@@ -35,25 +39,27 @@ add_library(piga_daemon SHARED ${HDRS} ${SRCS})
 
 export(TARGETS piga_daemon FILE PigaDaemonConfig.cmake)
 
+include(GNUInstallDirs)
+
 install(TARGETS piga_daemon
     EXPORT PigaDaemonConfig
-    ARCHIVE  DESTINATION lib
-    LIBRARY  DESTINATION lib
-    RUNTIME  DESTINATION bin)  # This is for Windows
-install(DIRECTORY include/ DESTINATION include)
-install(EXPORT PigaDaemonConfig DESTINATION lib/cmake)
+    ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})  # This is for Windows
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT PigaDaemonConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake)
 
 # Install the service file.
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION /etc/systemd/system/)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION ${CMAKE_INSTALL_SYSCONFIGDIR}/systemd/system/)
 
 add_executable(pigadaemon
     ${SRC}/main.cpp)
     
 install(TARGETS pigadaemon
     EXPORT PigaDaemonConfig
-    ARCHIVE  DESTINATION lib
-    LIBRARY  DESTINATION lib
-    RUNTIME  DESTINATION bin)  # This is for Windows
+    ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})  # This is for Windows
 
 target_link_libraries(pigadaemon piga_daemon)
 
@@ -91,6 +97,10 @@ find_package(Config++ REQUIRED)
 target_link_libraries(piga_daemon ${CONFIG++_LIBRARY})
 target_include_directories(piga_daemon PRIVATE ${CONFIG++_INCLUDE_DIR})
 
+find_package(Systemd REQUIRED)
+target_link_libraries(piga_daemon ${SYSTEMD_LIBRARIES})
+target_include_directories(piga_daemon PRIVATE ${SYSTEMD_INCLUDE_DIRS})
+
 find_package(LibpigaHosts REQUIRED)
 if(${LibpigaHosts_FOUND})
     include_directories(${LibpigaHosts_INCLUDE_DIRS})
@@ -101,6 +111,13 @@ if(${Piga_FOUND})
     target_link_libraries(piga_daemon ${PIGA_COMMON_LIBRARY} ${PIGA_SERVER_LIBRARY} ${PIGA_CLIENT_LIBRARY})
     include_directories(${PIGA_INCLUDE_DIRS})
 endif()
+
+add_subdirectory(plugin-sdk)
+target_link_libraries(piga_daemon pigadaemon-sdk)
+
+add_subdirectory(devkit)
+export(TARGETS devkit APPEND FILE PigaDaemonConfig.cmake)
+target_link_libraries(piga_daemon devkit)
 
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The main daemon that starts and stops applications, loads host files and listens for inputs in the piga system.")
 set(CPACK_PACKAGE_VENDOR "Pigaco")

@@ -13,3 +13,6 @@ Session.vim
 *~
 # auto-generated tag files
 tags
+
+.kdev4
+*.kdev4*

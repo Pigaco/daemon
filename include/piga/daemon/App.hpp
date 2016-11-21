@@ -5,39 +5,41 @@
 #include <string>
 #include <memory>
 
+#include <piga/daemon/sdk/App.hpp>
+
 namespace piga
 {
 namespace daemon
 {
-class App
+class App : public sdk::App
 {
 public:
     App(const std::string &defaultAppPath = "/usr/lib/piga/apps/", uid_t defaultUID = 1010, char **envp = nullptr);
     ~App();
 
-    void loadFromName(const std::string &name);
-    void loadFromPath(const std::string &path, bool autostart_active = true);
-    bool loadConfigFile(const std::string &configPath);
+    virtual void loadFromName(const std::string &name) override;
+    virtual void loadFromPath(const std::string &path, bool autostart_active = true) override;
+    virtual bool loadConfigFile(const std::string &configPath) override;
     static void generateSampleConfig(const std::string &output);
-    void reload(bool start = false);
-    void executeAutostart();
+    virtual void reload(bool start = false) override;
+    virtual void executeAutostart() override;
 
-    void start(bool restartIfRunning = false);
-    void stop();
+    virtual void start(bool restartIfRunning = false) override;
+    virtual void stop() override;
 
-    bool isRunning() const;
-    bool isInstalled() const;
-    pid_t getPid() const;
-    void update();
-    bool shouldWaitForSignal() const;
-    bool restartOnExit() const;
-    bool restartOnCrash() const;
+    virtual bool isRunning() const override;
+    virtual bool isInstalled() const override;
+    virtual void update() override;
+    virtual pid_t getPid() const override;
+    virtual bool shouldWaitForSignal() const override;
+    virtual bool restartOnExit() const override;
+    virtual bool restartOnCrash() const override;
 
-    const std::string& getPath() const;
-    const std::string& getName() const;
-    const std::string& getWorkingDir() const;
-    const std::string& getExecutable() const;
-    bool isAutostart() const;
+    virtual const std::string& getPath() const override;
+    virtual const std::string& getName() const override;
+    virtual const std::string& getWorkingDir() const override;
+    virtual const std::string& getExecutable() const override;
+    virtual bool isAutostart() const override;
 private:
     std::string m_appPath;
     std::string m_name = "Undefined App Name";

@@ -11,6 +11,12 @@
 #include <piga/host_config.h>
 #include <piga/event.h>
 
+#include <piga/event_request_restart.h>
+
+#include <piga/devkit/Devkit.hpp>
+#include <piga/daemon/DBusManager.hpp>
+#include <piga/daemon/PluginManager.hpp>
+
 using std::endl;
 using std::cout;
 
@@ -23,6 +29,7 @@ namespace as = ::boost::asio;
 
 Daemon::Daemon(char **envp)
     : m_io_service(std::make_shared<as::io_service>()),
+      m_dbusManager(std::make_shared<DBusManager>()),
       m_work(std::make_shared<as::io_service::work>(*m_io_service)),
       m_signals(*m_io_service, SIGINT, SIGHUP, SIGUSR1),
       m_envp(envp)
@@ -52,6 +59,12 @@ Daemon::Daemon(char **envp)
             BOOST_LOG_TRIVIAL(error) << "The local pidfile in \"" << path << "\" could not be opened!";
         }
     }
+    
+    m_pluginManager = std::make_shared<PluginManager>(
+        m_dbusManager,
+        m_io_service,
+        nullptr
+    );
 }
 
 Daemon::~Daemon()
@@ -90,6 +103,8 @@ void Daemon::run()
         BOOST_LOG_TRIVIAL(error) << "Could not start piga_host: " << piga_status_what_copy(status);
         return;
     }
+    
+    m_dbusManager->init();
 
     m_loader = std::unique_ptr<Loader>(new Loader(m_soPath,
                                                   piga_host_config_get_player_count(cfg),
@@ -98,8 +113,10 @@ void Daemon::run()
 
     m_loader->reload();
 
-    m_appManager = std::unique_ptr<AppManager>(new AppManager(m_defaultAppPath, m_defaultUID, m_envp));
+    m_appManager = std::make_shared<AppManager>(m_defaultAppPath, m_defaultUID, m_envp);
     m_appManager->reload(m_defaultAppPath);
+    
+    m_pluginManager->setAppManager(m_appManager);
 
     // Host loaded. Now load the client for the daemon.
     piga_client_config *client_cfg = piga_client_config_default();
@@ -113,7 +130,7 @@ void Daemon::run()
     m_hostTimer = std::make_shared<as::deadline_timer>(*m_io_service, boost::posix_time::milliseconds(1));
 
     m_hostTimer->async_wait(std::bind(&Daemon::update, this));
-
+    
     m_io_service->run();
 }
 
@@ -166,6 +183,44 @@ void Daemon::reload()
             } else {
                 root["hosts"].lookupValue("so_path", m_soPath);
             }
+            
+            if(!root.exists("devkit")) {
+                BOOST_LOG_TRIVIAL(warning) << "The \"devkit\" config is missing! Using default values.";
+                m_devkitActive = false;
+                m_devkitHttpPort = 8080;
+                warningHappened = true;
+            } else {
+                root["devkit"].lookupValue("active", m_devkitActive);
+                root["devkit"].lookupValue("port", m_devkitHttpPort);
+                
+                // Check for the devkit.
+                if(m_devkitActive && !m_devkit)  {
+                    m_devkit = m_pluginManager->activatePlugin<::piga::devkit::Devkit>("Devkit");
+                    m_devkit->setHTTPPort(m_devkitHttpPort);
+                    m_devkit->start();
+                } else if(!m_devkitActive && m_devkit) {
+                    m_pluginManager->removePlugin("Devkit");
+                }
+                
+                if(root["devkit"].exists("tokens")) {
+                    Setting &tokens = root["devkit"]["tokens"];
+                    
+                    std::string token;
+                    std::vector<::piga::devkit::Devkit::DevkitAction> actions;
+                    
+                    for(std::size_t i = 0; i < tokens.getLength(); ++i) {
+                        tokens[i].lookupValue("token", token);
+                        for(std::size_t n = 0; n < tokens[i]["actions"].getLength(); ++n) {
+                            actions.push_back(::piga::devkit::Devkit::getActionFromStr(
+                                tokens[i]["actions"][n]));
+                        }
+                        
+                        m_devkit->setAllowedActionsForToken(token, actions);
+                    }
+                } else {
+                    BOOST_LOG_TRIVIAL(warning) << "The \"devkit\" config has no defined tokens! Please define them in the order \"tokens = ({token = \"TOKEN\"; actions = (\"Export\", \"...\", ...); } );";
+                }
+            }
 
             if(!root.exists("apps")) {
                 BOOST_LOG_TRIVIAL(warning) << "The \"apps\" config is missing! Using default values.";
@@ -189,6 +244,12 @@ void Daemon::reload()
         {
             Setting &piga = root["piga"];
             piga.add("name", Setting::TypeString) = m_name;
+        }
+        root.add("devkit", Setting::TypeGroup);
+        {
+            Setting &devkit= root["devkit"];
+            devkit.add("active", Setting::TypeBoolean) = true;
+            devkit.add("port", Setting::TypeInt) = 8080;
         }
         root.add("hosts", Setting::TypeGroup);
         {
@@ -247,12 +308,25 @@ void Daemon::update()
         piga_host_update(m_host.get());
 
         piga_event_queue *clientQueue = piga_client_get_in_queue(m_client.get());
+        
+        std::shared_ptr<sdk::App> app;
+        
+        piga_event_request_restart *event_restart = nullptr;
+        
         while(piga_event_queue_poll(clientQueue, m_cacheEvent.get()) == PIGA_STATUS_OK) {
             switch(piga_event_get_type(m_cacheEvent.get())) {
                 case PIGA_EVENT_REQUEST_KEYBOARD:       // UNHANDLED
                     break;
                 case PIGA_EVENT_REQUEST_RESTART:
                     // An app should be started or restarted.
+                    event_restart = piga_event_get_request_restart(m_cacheEvent.get());
+                    piga_event_request_restart_get_name(event_restart, m_cacheBuffer);
+                    app = (*m_appManager)[m_cacheBuffer];
+                    if(app->isRunning()) {
+                        app->stop();
+                    }
+                    app->reload();
+                    app->start();
                     break;
                 case PIGA_EVENT_CONSUMER_REGISTERED:    // UNHANDLED
                     break;

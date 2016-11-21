@@ -70,6 +70,17 @@ void AppManager::processApps()
         }
     }
 }
+AppManager::AppPtr AppManager::operator[](const std::string &name)
+{
+    if(m_apps.count(name) == 1) {
+        return m_apps[name];
+    }
+    return nullptr;
+}
+AppManager::AppPtr AppManager::getApp(const std::string &name)
+{
+    return (*this)[name];
+}
 
 
 }
