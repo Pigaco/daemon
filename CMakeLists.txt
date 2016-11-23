@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # Library Version
 set(DAEMON_VERSION_MAJOR "0" CACHE STRING "Major-Version")
 set(DAEMON_VERSION_MINOR "9" CACHE STRING "Minor-Version")
-set(DAEMON_VERSION_PATCH "0" CACHE STRING "Patch-Version")
+set(DAEMON_VERSION_PATCH "1" CACHE STRING "Patch-Version")
 set(DAEMON_VERSION_TWEAK "0" CACHE STRING "Tweak-Version")
 set(DAEMON_VERSION_BUILD "0" CACHE STRING "Build")
 set(DAEMON_VERSION ${DAEMON_VERSION_MAJOR}.${DAEMON_VERSION_MINOR}.${DAEMON_VERSION_PATCH}.${DAEMON_VERSION_TWEAK}:${DAEMON_VERSION_BUILD})
@@ -50,7 +50,7 @@ install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT PigaDaemonConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake)
 
 # Install the service file.
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION ${CMAKE_INSTALL_SYSCONFIGDIR}/systemd/system/)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION /etc/systemd/system/)
 
 add_executable(pigadaemon
     ${SRC}/main.cpp)
