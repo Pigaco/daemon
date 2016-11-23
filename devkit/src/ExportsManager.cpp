@@ -103,7 +103,7 @@ void ExportsManager::updateNFS()
 }
 void ExportsManager::exportPathToHost(const std::string& path, const std::string& host)
 {
-    system(("exportfs -o " + host + ":" + path).c_str());
+    system(("exportfs " + host + ":" + path).c_str());
 }
 void ExportsManager::unexportPathToHost(const std::string& path, const std::string& host)
 {
