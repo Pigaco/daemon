@@ -23,6 +23,8 @@ void ExportsManager::setExport(const std::string &path, const std::string &host)
     if(std::find(hosts.begin(), hosts.end(), host) == hosts.end()) {
         hosts.push_back(host);
     }
+    
+    exportPathToHost(path, host);
 }
 void ExportsManager::removeExport(const std::string& path, const std::string& host)
 {
@@ -37,6 +39,8 @@ void ExportsManager::removeExport(const std::string& path, const std::string& ho
     if(hosts.size() == 0) {
         m_exports.erase(path);
     }
+    
+    unexportPathToHost(path, host);
 }
 void ExportsManager::readFromConfigFile()
 {
@@ -62,6 +66,8 @@ void ExportsManager::readFromConfigFile()
             if(hosts.find_first_of(',', i) == std::string::npos) {
                 break;
             }
+            
+            exportPathToHost(path, host);
         }
     }
 }
@@ -95,5 +101,14 @@ void ExportsManager::updateNFS()
     // TODO Ugly hack to reload exports.
     system("exportfs -ra");
 }
+void ExportsManager::exportPathToHost(const std::string& path, const std::string& host)
+{
+    system(("exportfs -o " + host + ":" + path).c_str());
+}
+void ExportsManager::unexportPathToHost(const std::string& path, const std::string& host)
+{
+    system(("exportfs -u " + host + ":" + path).c_str());
+}
+
 }
 }

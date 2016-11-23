@@ -27,6 +27,9 @@ public:
     void readFromConfigFile();
     void updateExportsFile();
     void updateNFS();
+    
+    void exportPathToHost(const std::string &path, const std::string &host);
+    void unexportPathToHost(const std::string &path, const std::string &host);
 private:
     std::string m_exportsFile = "/etc/exports.d/piga-nfs-exports.cfg";
     Devkit *m_devkit = nullptr;
