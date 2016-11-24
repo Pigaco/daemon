@@ -15,6 +15,7 @@ set(SRCS
     ${SRC}/Devkit.cpp
     ${SRC}/HTTPServer.cpp
     ${SRC}/ExportsManager.cpp
+    ${SRC}/WebUI.cpp
 )
 
 add_library(devkit SHARED ${SRCS})
@@ -37,14 +38,11 @@ endif()
 
 # http://stackoverflow.com/a/25836953 (Backwards compatible C++11 declaration.)
 include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-elseif(COMPILER_SUPPORTS_CXX0X)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
+if(COMPILER_SUPPORTS_CXX14)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 else()
-        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+    message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support. Please use a different C++ compiler.")
 endif()
 
 find_package(MHD REQUIRED) 
@@ -53,6 +51,10 @@ target_include_directories(devkit PRIVATE ${MHD_INCLUDE_DIR})
 
 target_link_libraries(devkit PUBLIC pigadaemon-sdk)
 
+find_package(Lua EXACT 5.2 REQUIRED)
+target_link_libraries(devkit PRIVATE ${LUA_LIBRARIES} dl)
+target_include_directories(devkit PRIVATE ${LUA_INCLUDE_DIR})
+
 include(GNUInstallDirs)
 
 install(TARGETS devkit EXPORT PigaDaemonConfig
@@ -60,3 +62,6 @@ install(TARGETS devkit EXPORT PigaDaemonConfig
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/web
+    DESTINATION /usr/share/piga/devkit/)

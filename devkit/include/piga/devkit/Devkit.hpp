@@ -28,6 +28,7 @@ public:
         RemoveExport,
         Reboot,
         RestartApp,
+        Web,
     };
     
     static DevkitAction getActionFromStr(const char *str);

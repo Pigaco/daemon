@@ -16,6 +16,7 @@ namespace piga
 namespace devkit 
 {
 class Devkit;
+class WebUI;
 
 class HTTPServer 
 {
@@ -25,7 +26,7 @@ public:
     HTTPServer(Devkit *devkit, uint32_t port = 8080);
     ~HTTPServer();
     
-    std::string parseRequest(const std::string &req);
+    std::string parseRequest(const std::string &req, std::string *contentType);
     
     void setAllowedActionsForToken(const std::string &token, const Devkit::ActionsVector &actions);
     
@@ -33,6 +34,8 @@ public:
     void removeNFSExport(JsonWriter &writer, const std::string &address);
     void reboot(JsonWriter &writer);
     void restartApp(JsonWriter &writer, const std::string &appName);
+    
+    std::string web(const std::string &path, std::string *contentType, const std::string &token);
     
     static int answer_to_connection (void *cls, struct MHD_Connection *connection,
                                      const char *url,
@@ -46,6 +49,8 @@ private:
     Devkit *m_devkit;
     
     std::map<std::string, Devkit::ActionsVector> m_tokens;
+    
+    std::unique_ptr<WebUI> m_webUI;
 };
 }
 }

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{title}}</title>
+    <link rel="stylesheet" href="css/semantic.min.css" />
+    <link rel="stylesheet" href="css/styles.css" />
+    
+    <script type="text/javascript">
+        devkit_token="{{ getToken() }}";
+    </script>
+
+    <script type="text/javascript" src="js/jquery-3.1.1.min.js"></script>
+    <script type="text/javascript" src="js/semantic.min.js"></script>
+</head>
+<body>
+    <div id="header-div" class="ui container">
+        <header class="ui inverted menu">
+            <div class="header item">
+                Pigaco Devkit
+            </div>
+            <a class="item {% if active_page == 'index' then %} active{% end %}" href="index">Home</a>
+            <a class="item {% if active_page == 'logs' then %} active{% end %}" href="logs">Logs</a>
+            <a class="item {% if active_page == 'devkit' then %} active{% end %}" href="devkit">Devkit</a>
+        </header>
+    </div>
+    <main class="ui container">
+        {*view*}
+    </main>
+</body>
+</html>

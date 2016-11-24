@@ -21,6 +21,8 @@ Devkit::DevkitAction Devkit::getActionFromStr(const char *str)
         return Reboot;
     else if(strcmp(str, "RestartApp") == 0)
         return RestartApp;
+    else if(strcmp(str, "Web") == 0)
+        return Web;
     return Unknown;
 }
     
