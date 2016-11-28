@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <fcntl.h>
 
+#include <piga/daemon/sdk/LogManager.hpp>
+
 #include <boost/xpressive/xpressive.hpp>
 #include <boost/xpressive/regex_actions.hpp>
 
@@ -22,20 +24,61 @@ namespace piga
 {
 namespace devkit 
 {
+struct ChunkedResponseData {
+    HTTPServer *object;
+    struct MHD_Connection *conn;
+    std::string url;
+    Devkit::DevkitAction action;
+};
+
 HTTPServer::HTTPServer(Devkit *devkit, uint32_t port)
     : m_devkit(devkit), m_port(port), m_webUI(new WebUI(devkit))
 {
     m_daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, m_port, NULL, NULL,
-        &HTTPServer::answer_to_connection, this, MHD_OPTION_END);
+        &HTTPServer::answer_to_connection, this, 
+        
+        MHD_OPTION_NOTIFY_COMPLETED, &HTTPServer::connectionEndedCb, this,
+        // MHD_OPTION_THREAD_POOL_SIZE, 2, // The connection cannot be suspended, because this conflicts with boost.
+        MHD_OPTION_END);
     
-    if (nullptr == m_daemon) 
+    if (nullptr == m_daemon) {
+        m_devkit->log("The HTTP daemon could not be started!");
         exit(1);
+    } 
+    
+    /* 
+    else {
+        // The daemon was created successfully. Now, sockets have to be assigned to 
+        // the io_service of the main application.
+        int r = 0;
+        
+        fd_set readFdSet;
+        fd_set writeFdSet;
+        fd_set exceptFdSet;
+        int maxFd = 0;
+        
+        r = MHD_get_fdset(m_daemon, &readFdSet, &writeFdSet, &exceptFdSet, &maxFd);
+        if(r != MHD_YES) {
+            m_devkit->log("fd_sets could not be received from MHD!");
+        } else {
+            m_devkit->log("fd_sets received!");
+            
+            m_writeFdSet.reset(new boost::asio::detail::posix_fd_set_adapter());
+            m_readFdSet.reset(new boost::asio::detail::posix_fd_set_adapter());
+            
+            *(*m_readFdSet) = readFdSet;
+            *(*m_writeFdSet) = writeFdSet;
+            
+            boost::asio::async_read(m_readFdSet, )
+        }
+    }
+    */
 }
 HTTPServer::~HTTPServer()
 {
     MHD_stop_daemon(m_daemon);
 }
-std::string HTTPServer::parseRequest(const std::string &req, std::string *contentType) 
+std::string HTTPServer::parseRequest(const std::string &req, std::string *contentType, Devkit::DevkitAction *return_action) 
 {
     using namespace boost::xpressive;
   
@@ -58,6 +101,8 @@ std::string HTTPServer::parseRequest(const std::string &req, std::string *conten
         |
             "/devkit/" >> (+_w)[xpr::ref(token) = _, xpr::ref(action) = Devkit::RestartApp] >> "/restartApp/" >> (+_w)[xpr::ref(params)[0] = _]
         |  
+            "/devkit/" >> (+_w)[xpr::ref(token) = _, xpr::ref(action) = Devkit::GetLogBuffer] >> "/log/"
+        |  
             "/web/"    >> (+_w)[xpr::ref(token) = _, xpr::ref(action) = Devkit::Web] >> "/" >> *(*(+_w) | *(set='.',':','/','-'))
         ;
     regex_match(req, expr);
@@ -73,6 +118,7 @@ std::string HTTPServer::parseRequest(const std::string &req, std::string *conten
     
     if(tokenValid) 
     {
+        *return_action = action;
         switch(action) 
         {
             case Devkit::Unknown:
@@ -91,6 +137,10 @@ std::string HTTPServer::parseRequest(const std::string &req, std::string *conten
             case Devkit::Reboot:
                 reboot(writer);
                 break;
+            case Devkit::GetLogBuffer:
+                *contentType = "text";
+                return "\n";
+                break;
             case Devkit::RestartApp:
                 restartApp(writer, params[0]);
                 break;
@@ -98,6 +148,7 @@ std::string HTTPServer::parseRequest(const std::string &req, std::string *conten
                 // The right parameter is everything after the / of the token.
                 params[0] = req.substr(req.find_first_of("/", req.find_first_of("/", 6)) + 1); 
                 return web(params[0], contentType, token);
+                break;
         }
     }
     else {
@@ -129,6 +180,98 @@ void HTTPServer::removeNFSExport(JsonWriter &writer, const std::string &address)
 void HTTPServer::reboot(JsonWriter &writer)
 {
     m_devkit->m_dbusManager->Reboot();
+}
+void HTTPServer::connectionEndedCb(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode code)
+{
+    HTTPServer *server = static_cast<HTTPServer*>(cls);
+    server->connectionEnded(connection, con_cls, code);
+}
+void HTTPServer::connectionEnded(struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode code)
+{
+    Devkit::DevkitAction action = getConnectionAction(connection);
+    if(action == Devkit::GetLogBuffer) {
+        removeLogReader();
+        {
+            std::lock_guard<std::mutex> logLock(m_logAccessMutex);
+            if(m_logReaderPos.count(connection) > 0) {
+                m_logReaderPos.erase(connection);
+            }
+        }
+    }
+    eraseConnectionFromActions(connection);
+}
+void HTTPServer::addLogReader()
+{
+    std::lock_guard<std::mutex> logLock(m_logAccessMutex);
+    ++m_logAccessorCount;
+    if(m_logAccessorCount == 1) {
+        m_logReaderConnection = 
+            ::piga::daemon::sdk::LogManager::get()->getOutBuffer().bufferFlush.connect(
+                boost::bind(&HTTPServer::logReaderCallback, this, _1)
+            );
+    }
+}
+void HTTPServer::removeLogReader()
+{
+    std::lock_guard<std::mutex> logLock(m_logAccessMutex);
+    --m_logAccessorCount;
+    
+    if(m_logAccessorCount == 0) {
+        m_logReaderConnection.disconnect();
+    }
+}
+void HTTPServer::logReaderCallback(const std::string &msg) 
+{
+    {
+        std::lock_guard<std::mutex> logLock(m_logAccessMutex);
+        m_logBuffer.push_back(msg);
+    }
+    
+    // We have to resume all connections with GetLogBuffer actions.
+    std::vector<struct MHD_Connection*> conns = getConnectionsOfAction(Devkit::GetLogBuffer);
+    for(auto conn : conns) {
+        // MHD_resume_connection(conn); //TODO implement boost integration to make libmicrohttpd and boost asio compatible.
+    }
+}
+std::string HTTPServer::getLogMsgForConnection(struct MHD_Connection *conn)
+{
+    std::string msg;
+    std::size_t logPos = 0;
+    std::lock_guard<std::mutex> logLock(m_logAccessMutex);
+    if(m_logReaderPos.count(conn) > 0) {
+        logPos = m_logReaderPos[conn];
+    } 
+    else {
+        // This is the first log message. 
+        m_logReaderPos[conn] = 0;
+        logPos = 0;
+    }
+    if(m_logBuffer.size() > 0) {
+        msg = m_logBuffer[logPos];
+        ++m_logReaderPos[conn];
+    } else {
+        // There are no logs currently! Suspend the connection
+        // The connection will be resumed when there are new log messages.
+        // MHD_suspend_connection(conn); // Suspend cannot be used with one thread per connection
+        // TODO implement boost integration to do select() calling.
+        return "";
+    }
+    // Check if we can shrink the buffer. This occurs, when all connections read the
+    // next message.
+    bool shrinkByOne = true;
+    for(auto it : m_logReaderPos) {
+        if(it.second < 1) {
+            shrinkByOne = false;
+        }
+    }
+    if(shrinkByOne) {
+        for(auto it : m_logReaderPos) {
+            --it.second;
+        }
+        m_logBuffer.erase(m_logBuffer.begin());
+    }
+    
+    return msg;
 }
 std::string HTTPServer::web(const std::string &path, std::string *contentType, const std::string &token) {
     // Check if this is a file.
@@ -165,6 +308,60 @@ void HTTPServer::restartApp(JsonWriter &writer, const std::string &app)
         writer.String(("The app \"" + app + "\" was not found in the app manager.").c_str());
     }
 }
+
+int64_t HTTPServer::chunkedResponseCallback(void *cls, uint64_t pos, char *buf, size_t max) 
+{
+    ChunkedResponseData *data = static_cast<ChunkedResponseData*>(cls);
+    
+    if(data->action == Devkit::GetLogBuffer) {
+        std::string msg = getLogMsgForConnection(data->conn);
+        if(msg.length() < max) {
+            std::memcpy(buf, msg.data(), msg.length());
+            return msg.length();
+        } else {
+            std::memcpy(buf, msg.data(), max);
+            return max;
+        }
+    }
+    else {
+        // All other actions are not handled as chunked callbacks.
+        return -1;
+    }
+}
+void HTTPServer::setConnectionAction(struct MHD_Connection *conn, Devkit::DevkitAction action)
+{
+    std::lock_guard<std::mutex> connectionActionMutexLock(m_actionMapMutex);
+    m_actionMap[conn] = action;
+}
+Devkit::DevkitAction HTTPServer::getConnectionAction(struct MHD_Connection *conn)
+{
+    std::lock_guard<std::mutex> connectionActionMutexLock(m_actionMapMutex);
+    if(m_actionMap.count(conn) > 0) {
+        return m_actionMap[conn];
+    }
+    return Devkit::Unknown;
+}
+void HTTPServer::eraseConnectionFromActions(struct MHD_Connection *conn)
+{
+    std::lock_guard<std::mutex> connectionActionMutexLock(m_actionMapMutex);
+    if(m_actionMap.count(conn) > 0) {
+        m_actionMap.erase(conn);
+    }
+}
+std::vector<struct MHD_Connection*> HTTPServer::getConnectionsOfAction(Devkit::DevkitAction action)
+{
+    std::lock_guard<std::mutex> connectionActionMutexLock(m_actionMapMutex);
+    
+    std::vector<struct MHD_Connection*> connections;
+    
+    for(auto it : m_actionMap) {
+        if(it.second == action) {
+            connections.push_back(it.first);
+        }
+    }
+    
+    return connections;
+}
 int HTTPServer::answer_to_connection(void* cls, struct MHD_Connection* connection, const char* url, const char* method, const char* version, const char* upload_data, std::size_t* upload_data_size, void ** con_cls)
 {
     HTTPServer *instance = static_cast<HTTPServer*>(cls);
@@ -172,10 +369,13 @@ int HTTPServer::answer_to_connection(void* cls, struct MHD_Connection* connectio
     struct MHD_Response *response = nullptr;
     
     int ret;
+    Devkit::DevkitAction action = Devkit::Unknown;
     
     std::string contentType = "application/json";
-    std::string answer = instance->parseRequest(url, &contentType);
+    std::string answer = instance->parseRequest(url, &contentType, &action);
     
+    // Set the connection action for cleanup purposes.
+    instance->setConnectionAction(connection, action);
     
     if(answer.length() > 0) {
         if(answer[0] == '/') {
@@ -184,6 +384,30 @@ int HTTPServer::answer_to_connection(void* cls, struct MHD_Connection* connectio
             off_t fsize;
             fsize = lseek(fd, 0, SEEK_END);
             response = MHD_create_response_from_fd(fsize, fd);
+        }
+        else if(answer[0] == '\n') {
+            // This is a chunked response and should use a callback.
+            
+            ChunkedResponseData *data = new ChunkedResponseData();
+            data->object = instance;
+            data->url = url;
+            data->action = action;
+            data->conn = connection;
+            
+            response = MHD_create_response_from_callback(-1, 
+                4000,
+                [](void *cls, uint64_t pos, char *buf, size_t max) {
+                    ChunkedResponseData *data = static_cast<ChunkedResponseData*>(cls);
+                    return data->object->chunkedResponseCallback(cls, pos, buf, max);
+                },
+                data,
+                [](void *cls) {
+                    ChunkedResponseData *data = static_cast<ChunkedResponseData*>(cls);
+                    delete data;
+                }
+            );
+            //MHD_add_connection(respone, "Transfer-Encoding", "chunked");
+            
         }
         else {
             // An answer should be transmitted.

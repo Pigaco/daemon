@@ -1,3 +1,6 @@
+#define BOOST_LOG_DYN_LINK 1
+#define BOOST_ALL_DYN_LINK 1
+
 #include <boost/log/trivial.hpp>
 #include <piga/daemon/Daemon.hpp>
 
@@ -8,11 +11,16 @@ using std::endl;
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
+#include <piga/daemon/LogManager.hpp>
+
 int main(int argc, char *argv[], char** envp)
 {
     BOOST_LOG_TRIVIAL(info) << "Starting up pigadaemon.";
 
     using namespace piga::daemon;
+    
+    LogManager logManager;
+    logManager.init();
 
     try {
         po::options_description desc("Possible command line options for the pigadaemon. If no options are given, the daemon starts.");

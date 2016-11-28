@@ -22,6 +22,7 @@ set(HDRS
     ${HDR}/AppManager.hpp
     ${HDR}/PluginManager.hpp
     ${HDR}/DBusManager.hpp
+    ${HDR}/LogManager.hpp
 )
 set(SRCS
     ${SRC}/Daemon.cpp
@@ -31,6 +32,7 @@ set(SRCS
     ${SRC}/AppManager.cpp
     ${SRC}/PluginManager.cpp
     ${SRC}/DBusManager.cpp
+    ${SRC}/LogManager.cpp
 )
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
@@ -80,7 +82,7 @@ target_include_directories(piga_daemon PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-find_package(Boost COMPONENTS system filesystem program_options serialization log REQUIRED)
+find_package(Boost COMPONENTS system filesystem program_options serialization log_setup log REQUIRED)
 if(${Boost_FOUND})
     target_include_directories(piga_daemon PRIVATE ${Boost_INCLUDE_DIR})
     target_link_libraries(piga_daemon ${Boost_LIBRARIES})

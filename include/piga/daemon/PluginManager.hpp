@@ -8,6 +8,8 @@
 #include <string>
 #include <unordered_map>
 
+#include <piga/daemon/LogManager.hpp>
+
 namespace piga
 {
 namespace daemon
@@ -15,7 +17,12 @@ namespace daemon
 class PluginManager
 {
 public:
-    typedef std::unordered_map<std::string, std::shared_ptr<sdk::Plugin>> PluginMap;
+    typedef std::shared_ptr<sdk::Plugin> PluginPtr;
+    struct Plugin {
+        PluginPtr plugin;
+        SeverityChannelLogger logger;
+    };
+    typedef std::unordered_map<std::string, Plugin> PluginMap;
     
     PluginManager(
         std::shared_ptr<sdk::DBusManager> dbusManager,
@@ -32,16 +39,19 @@ public:
             plugin = std::static_pointer_cast<sdk::Plugin>(
                 std::make_shared<T>());
             
-            m_plugins[identifier] = plugin;
+            m_plugins[identifier].plugin = plugin;
         } else {
-            plugin = m_plugins[identifier];
+            plugin = m_plugins[identifier].plugin;
         }
+        
+        Plugin *entry = &m_plugins[identifier];
+        entry->logger = SeverityChannelLogger(boost::log::keywords::channel = ("Plugin:" + identifier));
         
         plugin->setDBusManager(m_dbusManager);
         plugin->setAppManager(m_appManager);
         plugin->setIOService(m_ioService);
-        plugin->setLoggingCallback([this,identifier](const std::string &msg) {
-            BOOST_LOG_TRIVIAL(info) << "[" + identifier + "] " << msg;
+        plugin->setLoggingCallback([this,identifier,entry](const std::string &msg) {
+            BOOST_LOG_SEV(entry->logger, L_INFO) << msg;
         });
         
         return std::static_pointer_cast<T>(plugin);

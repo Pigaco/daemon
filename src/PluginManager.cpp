@@ -24,28 +24,28 @@ void PluginManager::setDBusManager(std::shared_ptr<sdk::DBusManager> dbusManager
 {
     m_dbusManager = dbusManager;
     for(auto &plugin : m_plugins) {
-        plugin.second->setDBusManager(dbusManager);
+        plugin.second.plugin->setDBusManager(dbusManager);
     }
 }
 void PluginManager::setIOService(std::shared_ptr<boost::asio::io_service> ioService)
 {
     m_ioService = ioService;
     for(auto &plugin : m_plugins) {
-        plugin.second->setIOService(ioService);
+        plugin.second.plugin->setIOService(ioService);
     }
 }
 void PluginManager::setAppManager(std::shared_ptr<sdk::AppManager> appManager)
 {
     m_appManager = appManager;
     for(auto &plugin : m_plugins) {
-        plugin.second->setAppManager(appManager);
+        plugin.second.plugin->setAppManager(appManager);
     }
 }
 
 bool PluginManager::startPlugin(const std::string &identifier) 
 {
     if(m_plugins.count(identifier) > 0) {
-        m_plugins[identifier]->start();
+        m_plugins[identifier].plugin->start();
         return true;
     } 
     return false;
@@ -53,7 +53,7 @@ bool PluginManager::startPlugin(const std::string &identifier)
 bool PluginManager::stopPlugin(const std::string &identifier) 
 {
     if(m_plugins.count(identifier) > 0) {
-        m_plugins[identifier]->stop();
+        m_plugins[identifier].plugin->stop();
         return true;
     } 
     return false;

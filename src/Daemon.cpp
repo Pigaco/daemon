@@ -1,5 +1,4 @@
 #include <piga/daemon/Daemon.hpp>
-#include <boost/log/trivial.hpp>
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 #include <functional>
@@ -17,6 +16,7 @@
 #include <piga/daemon/DBusManager.hpp>
 #include <piga/daemon/PluginManager.hpp>
 
+
 using std::endl;
 using std::cout;
 
@@ -24,7 +24,6 @@ namespace piga
 {
 namespace daemon
 {
-
 namespace as = ::boost::asio;
 
 Daemon::Daemon(char **envp)
@@ -32,7 +31,8 @@ Daemon::Daemon(char **envp)
       m_dbusManager(std::make_shared<DBusManager>()),
       m_work(std::make_shared<as::io_service::work>(*m_io_service)),
       m_signals(*m_io_service, SIGINT, SIGHUP, SIGUSR1),
-      m_envp(envp)
+      m_envp(envp),
+      m_log(bl::keywords::channel = "Class:Daemon")
 {
     m_signals.async_wait(boost::bind(&Daemon::signalHandler, this, _1, _2));
 
@@ -46,9 +46,9 @@ Daemon::Daemon(char **envp)
         setenv("PIGA_DAEMON_PIDFILE_PATH", PIGA_DAEMON_PIDFILE_PATH, 1);
     } else {
         std::string path = boost::filesystem::current_path().string();
-		BOOST_LOG_TRIVIAL(error) << "Could not create pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights?";
+		BOOST_LOG_SEV(m_log, L_ERROR) << "Could not create pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights?";
         path += "/.pigadaemon.pid";
-        BOOST_LOG_TRIVIAL(info) << "Creating local pidfile and setting he envvar PIGA_DAEMON_PIDFILE_PATH to " << path;
+        BOOST_LOG_SEV(m_log, L_INFO) << "Creating local pidfile and setting he envvar PIGA_DAEMON_PIDFILE_PATH to " << path;
 
 		pidfile.open(path, std::ios::trunc | std::ios::out);
 		if(pidfile.is_open()) {
@@ -56,7 +56,7 @@ Daemon::Daemon(char **envp)
 			pidfile << pid;
             pidfile.close();
         } else {
-            BOOST_LOG_TRIVIAL(error) << "The local pidfile in \"" << path << "\" could not be opened!";
+            BOOST_LOG_SEV(m_log, L_ERROR) << "The local pidfile in \"" << path << "\" could not be opened!";
         }
     }
     
@@ -69,20 +69,20 @@ Daemon::Daemon(char **envp)
 
 Daemon::~Daemon()
 {
-    BOOST_LOG_TRIVIAL(info) << "Shutting down pigadaemon.";
+    BOOST_LOG_SEV(m_log, L_INFO) << "Shutting down pigadaemon.";
     // Remove the pidfile.
     std::remove(PIGA_DAEMON_PIDFILE_PATH);
     bool removed = !std::ifstream(PIGA_DAEMON_PIDFILE_PATH);
     if(!removed) {
-		BOOST_LOG_TRIVIAL(error) << "Could not remove pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights? - Trying local pidfile.";
+		BOOST_LOG_SEV(m_log, L_ERROR) << "Could not remove pidfile in \"" << PIGA_DAEMON_PIDFILE_PATH << "\". Does the daemon have the neccessary access rights? - Trying local pidfile.";
 		std::remove(getenv("PIGA_DAEMON_PIDFILE_PATH"));
 		bool removed = !std::ifstream(getenv("PIGA_DAEMON_PIDFILE_PATH"));
         if(!removed) {
-            BOOST_LOG_TRIVIAL(error) << "Could not remove pidfile in \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\". Was it created?";
+            BOOST_LOG_SEV(m_log, L_ERROR) << "Could not remove pidfile in \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\". Was it created?";
         }
     }
     // Unset the environment variable.
-    BOOST_LOG_TRIVIAL(debug) << "Clearing envvar PIGA_DAEMON_PIDFILE_PATH, which had the content \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\"";	
+    BOOST_LOG_SEV(m_log, L_DEBUG) << "Clearing envvar PIGA_DAEMON_PIDFILE_PATH, which had the content \"" << getenv("PIGA_DAEMON_PIDFILE_PATH") << "\"";	
 	unsetenv("PIGA_DAEMON_PIDFILE_PATH");
 }
 
@@ -100,7 +100,7 @@ void Daemon::run()
     piga_status status = piga_host_startup(m_host.get());
 
     if(status != PIGA_STATUS_OK) {
-        BOOST_LOG_TRIVIAL(error) << "Could not start piga_host: " << piga_status_what_copy(status);
+        BOOST_LOG_SEV(m_log, L_ERROR) << "Could not start piga_host: " << piga_status_what_copy(status);
         return;
     }
     
@@ -136,59 +136,59 @@ void Daemon::run()
 
 void Daemon::stop()
 {
-    BOOST_LOG_TRIVIAL(info) << "Stopping the pigadaemon";
+    BOOST_LOG_SEV(m_log, L_INFO) << "Stopping the pigadaemon";
     m_io_service->stop();
 }
 
 void Daemon::reload()
 {
-    BOOST_LOG_TRIVIAL(info) << "Loading configuration of pigadaemon.";
+    BOOST_LOG_SEV(m_log, L_INFO) << "Loading configuration of pigadaemon.";
     // Load the configuration file.
     using namespace libconfig;
 
     Config cfg;
 
-    bool warningHappened = false;
+    bool L_WARNHappened = false;
 
     try {
         cfg.readFile(m_configFilePath.c_str());
     }
     catch(const FileIOException &e) {
-        BOOST_LOG_TRIVIAL(error) << "I/O error while reading file \"" << m_configFilePath << "\"";
-        warningHappened = true;
+        BOOST_LOG_SEV(m_log, L_ERROR) << "I/O L_ERROR while reading file \"" << m_configFilePath << "\"";
+        L_WARNHappened = true;
     }
     catch(const ParseException &e) {
-        BOOST_LOG_TRIVIAL(error) << "Parse error at \"" << e.getFile() << "\":" << e.getLine() << " : " << e.getError();
-        warningHappened = true;
+        BOOST_LOG_SEV(m_log, L_ERROR) << "Parse L_ERROR at \"" << e.getFile() << "\":" << e.getLine() << " : " << e.getError();
+        L_WARNHappened = true;
         return;
     }
 
-    if(!warningHappened)
+    if(!L_WARNHappened)
     {
         try {
             Setting &root = cfg.getRoot();
 
             if(!root.exists("piga")) {
-                BOOST_LOG_TRIVIAL(warning) << "The \"piga\" config is missing! Using default values.";
+                BOOST_LOG_SEV(m_log, L_WARN) << "The \"piga\" config is missing! Using default values.";
                 m_name = "Unnamed Piga Host";
-                warningHappened = true;
+                L_WARNHappened = true;
             } else {
                 root["piga"].lookupValue("name", m_name);
             }
 
             if(!root.exists("hosts")) {
-                BOOST_LOG_TRIVIAL(warning) << "The \"hosts\" config is missing! Using default values.";
+                BOOST_LOG_SEV(m_log, L_WARN) << "The \"hosts\" config is missing! Using default values.";
                 m_soPath = "/usr/lib/piga/hosts/";
-                warningHappened = true;
+                L_WARNHappened = true;
             } else {
                 root["hosts"].lookupValue("so_path", m_soPath);
             }
             
             if(!root.exists("devkit")) {
-                BOOST_LOG_TRIVIAL(warning) << "The \"devkit\" config is missing! Using default values.";
+                BOOST_LOG_SEV(m_log, L_WARN) << "The \"devkit\" config is missing! Using default values.";
                 m_devkitActive = false;
                 m_devkitHttpPort = 8080;
-                warningHappened = true;
+                L_WARNHappened = true;
             } else {
                 root["devkit"].lookupValue("active", m_devkitActive);
                 root["devkit"].lookupValue("port", m_devkitHttpPort);
@@ -218,26 +218,26 @@ void Daemon::reload()
                         m_devkit->setAllowedActionsForToken(token, actions);
                     }
                 } else {
-                    BOOST_LOG_TRIVIAL(warning) << "The \"devkit\" config has no defined tokens! Please define them in the order \"tokens = ({token = \"TOKEN\"; actions = (\"Export\", \"...\", ...); } );";
+                    BOOST_LOG_SEV(m_log, L_WARN) << "The \"devkit\" config has no defined tokens! Please define them in the order \"tokens = ({token = \"TOKEN\"; actions = (\"Export\", \"...\", ...); } );";
                 }
             }
 
             if(!root.exists("apps")) {
-                BOOST_LOG_TRIVIAL(warning) << "The \"apps\" config is missing! Using default values.";
-                warningHappened = true;
+                BOOST_LOG_SEV(m_log, L_WARN) << "The \"apps\" config is missing! Using default values.";
+                L_WARNHappened = true;
             } else {
                 root["apps"].lookupValue("default_uid", m_defaultUID);
                 root["apps"].lookupValue("app_path", m_defaultAppPath);
             }
         }
         catch(std::exception &e) {
-            BOOST_LOG_TRIVIAL(warning) << "Caught an exception while parsing the config: " << e.what();
-            warningHappened = true;
+            BOOST_LOG_SEV(m_log, L_WARN) << "Caught an exception while parsing the config: " << e.what();
+            L_WARNHappened = true;
         }
     }
 
     // Sample config file generator.
-    if(warningHappened) {
+    if(L_WARNHappened) {
         Config cfg;
         Setting &root = cfg.getRoot();
         root.add("piga", Setting::TypeGroup);
@@ -264,12 +264,12 @@ void Daemon::reload()
         }
 
         std::string samplePath = m_configFilePath + ".sample";
-        BOOST_LOG_TRIVIAL(info) << "Because warnings happened while reading the config, a sample config file was generated and placed into " << samplePath;
+        BOOST_LOG_SEV(m_log, L_INFO) << "Because L_WARNs happened while reading the config, a sample config file was generated and placed into " << samplePath;
         try {
             cfg.writeFile(samplePath.c_str());
         }
         catch(FileIOException &e) {
-            BOOST_LOG_TRIVIAL(error) << "I/O error while writing sample config file \"" << samplePath << "\"";
+            BOOST_LOG_SEV(m_log, L_ERROR) << "I/O L_ERROR while writing sample config file \"" << samplePath << "\"";
         }
     }
 
@@ -295,7 +295,7 @@ void Daemon::signalHandler(const boost::system::error_code &code, int signal_num
             break;
         case SIGUSR1:
             // This signal means, that the app processing should continue.
-            BOOST_LOG_TRIVIAL(info) << "Received a SIGUSR1, this means the daemon continues processing the apps now.";
+            BOOST_LOG_SEV(m_log, L_INFO) << "Received a SIGUSR1, this means the daemon continues processing the apps now.";
             m_appManager->processApps();
             break;
     }

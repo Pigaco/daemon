@@ -13,6 +13,7 @@
 
 #include <piga/daemon/Loader.hpp>
 #include <piga/daemon/AppManager.hpp>
+#include <piga/daemon/LogManager.hpp>
 
 #define PIGA_DAEMON_PIDFILE_PATH "/etc/piga/proc/daemon.pid"
 
@@ -31,7 +32,7 @@ class PluginManager;
 class Daemon
 {
 public:
-    Daemon(char **envp);
+    Daemon(char** envp);
     ~Daemon();
 
     void run();
@@ -70,6 +71,8 @@ private:
     std::shared_ptr<piga_event> m_cacheEvent;
     char m_cacheBuffer[PIGA_EVENT_APP_INSTALLED_NAME_LENGTH];
     char **m_envp;
+    
+    SeverityChannelLogger m_log;
 };
 }
 }

@@ -28,6 +28,7 @@ public:
         RemoveExport,
         Reboot,
         RestartApp,
+        GetLogBuffer,
         Web,
     };
     
