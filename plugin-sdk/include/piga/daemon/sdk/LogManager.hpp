@@ -22,6 +22,9 @@ public:
        
         bufferFlush(this->str());
         
+        // Clear the buffer.
+        this->str("");
+        
         return 0;
     }
     BufferFlushSignal bufferFlush;

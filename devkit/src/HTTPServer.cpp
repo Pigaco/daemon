@@ -236,19 +236,14 @@ void HTTPServer::logReaderCallback(const std::string &msg)
 std::string HTTPServer::getLogMsgForConnection(struct MHD_Connection *conn)
 {
     std::string msg;
-    std::size_t logPos = 0;
     std::lock_guard<std::mutex> logLock(m_logAccessMutex);
-    if(m_logReaderPos.count(conn) > 0) {
-        logPos = m_logReaderPos[conn];
-    } 
-    else {
-        // This is the first log message. 
+    if(m_logReaderPos.count(conn) == 0) {
         m_logReaderPos[conn] = 0;
-        logPos = 0;
-    }
+    } 
+    std::size_t &logPos = m_logReaderPos[conn];
     if(m_logBuffer.size() > 0) {
         msg = m_logBuffer[logPos];
-        ++m_logReaderPos[conn];
+        ++logPos;
     } else {
         // There are no logs currently! Suspend the connection
         // The connection will be resumed when there are new log messages.
@@ -260,13 +255,13 @@ std::string HTTPServer::getLogMsgForConnection(struct MHD_Connection *conn)
     // next message.
     bool shrinkByOne = true;
     for(auto it : m_logReaderPos) {
-        if(it.second < 1) {
+        if(it.first != conn && it.second < 1) {
             shrinkByOne = false;
         }
     }
-    if(shrinkByOne) {
+    if(shrinkByOne && logPos > 0) {
         for(auto it : m_logReaderPos) {
-            --it.second;
+            m_logReaderPos[conn] = it.second - 1;
         }
         m_logBuffer.erase(m_logBuffer.begin());
     }
@@ -387,6 +382,10 @@ int HTTPServer::answer_to_connection(void* cls, struct MHD_Connection* connectio
         }
         else if(answer[0] == '\n') {
             // This is a chunked response and should use a callback.
+            
+            if(action == Devkit::GetLogBuffer) {
+                instance->addLogReader();
+            }
             
             ChunkedResponseData *data = new ChunkedResponseData();
             data->object = instance;
