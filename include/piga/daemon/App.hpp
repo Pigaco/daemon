@@ -6,6 +6,7 @@
 #include <memory>
 
 #include <piga/daemon/sdk/App.hpp>
+#include <piga/daemon/LogManager.hpp>
 
 namespace piga
 {
@@ -48,6 +49,7 @@ private:
     std::string m_workingDir;
     std::string m_executable;
     std::vector<std::string> m_args;
+    std::vector<std::string> m_envvars;
 
     bool m_stopped = false;
     bool m_running = false;
@@ -62,6 +64,9 @@ private:
     uid_t m_uid = 1010;
     char **m_envp;
     int m_waitpid_counter = 0;
+    
+    SeverityChannelLogger m_log;
+    SeverityChannelLogger m_appLog;
 };
 }
 }

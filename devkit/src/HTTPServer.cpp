@@ -304,7 +304,12 @@ void HTTPServer::restartApp(JsonWriter &writer, const std::string &app)
     }
 }
 
-int64_t HTTPServer::chunkedResponseCallback(void *cls, uint64_t pos, char *buf, size_t max) 
+#if MHD_VERSION < 0x00095102
+int // These defines are needed because of version discrepancies in MHD between debian and arch.
+#else
+int64_t
+#endif
+HTTPServer::chunkedResponseCallback(void *cls, uint64_t pos, char *buf, size_t max) 
 {
     ChunkedResponseData *data = static_cast<ChunkedResponseData*>(cls);
     
@@ -395,7 +400,11 @@ int HTTPServer::answer_to_connection(void* cls, struct MHD_Connection* connectio
             
             response = MHD_create_response_from_callback(-1, 
                 4000,
+#if MHD_VERSION < 0x00095102
+                [](void *cls, uint64_t pos, char *buf, uint32_t max) {
+#else 
                 [](void *cls, uint64_t pos, char *buf, size_t max) {
+#endif
                     ChunkedResponseData *data = static_cast<ChunkedResponseData*>(cls);
                     return data->object->chunkedResponseCallback(cls, pos, buf, max);
                 },

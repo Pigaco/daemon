@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <piga/daemon/Daemon.hpp>
 
 namespace piga
 {
@@ -30,18 +31,22 @@ void App::loadFromName(const std::string &name)
 void App::loadFromPath(const std::string &path, bool autostart_active)
 {
     m_path = path;
+    
     m_workingDir = path;
     if(loadConfigFile(std::string(path + "/app_config.cfg"))) {
-        BOOST_LOG_TRIVIAL(info) << "App stub \"" << m_name << "\" successfully loaded into the internal database from \"" << path << "\".";
+        m_log = SeverityChannelLogger(boost::log::keywords::channel = "Class:App (\"" + m_name + "\")");
+        m_appLog = SeverityChannelLogger(boost::log::keywords::channel = "App \"" + m_name + "\"");
+        
+        BOOST_LOG_SEV(m_log,L_INFO) << "App stub \"" << m_name << "\" successfully loaded into the internal database from \"" << path << "\".";
         m_installed = true;
 
         if(autostart_active && m_autostart) {
-            BOOST_LOG_TRIVIAL(info) << "Autostart of app \"" << m_name << "\" is active. It will now be started.";
+            BOOST_LOG_SEV(m_log,L_INFO) << "Autostart of app \"" << m_name << "\" is active. It will now be started.";
             start();
         }
     }
     else {
-        BOOST_LOG_TRIVIAL(error) << "App stub could not be loaded into the internal database from \"" << path << "\".";
+        BOOST_LOG_SEV(m_log,L_ERROR) << "App stub could not be loaded into the internal database from \"" << path << "\".";
         m_installed = false;
     }
 }
@@ -53,69 +58,77 @@ bool App::loadConfigFile(const std::string &configPath)
         cfg.readFile(configPath.c_str());
     }
     catch(const FileIOException &e) {
-        BOOST_LOG_TRIVIAL(error) << "File IO error while trying to read config file \"" << configPath << "\"";
+        BOOST_LOG_SEV(m_log,L_ERROR) << "File IO error while trying to read config file \"" << configPath << "\"";
         return false;
     }
     catch(const ParseException &e) {
-        BOOST_LOG_TRIVIAL(error) << "Parse error in \"" << e.getFile() << "\":" << e.getLine() << " : " << e.getError();
+        BOOST_LOG_SEV(m_log,L_ERROR) << "Parse error in \"" << e.getFile() << "\":" << e.getLine() << " : " << e.getError();
         return false;
     }
 
     Setting &root = cfg.getRoot();
 
     if(!root.lookupValue("name", m_name)) {
-        BOOST_LOG_TRIVIAL(error) << "App config file \"" << configPath << "\" doesn't define a name!";
+        BOOST_LOG_SEV(m_log, L_ERROR) << "App config file \"" << configPath << "\" doesn't define a name!";
         m_name = "Undefined Name";
         return false;
     }
 
     if(!root.lookupValue("autostart", m_autostart)) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't define autostart!";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't define autostart!";
         m_autostart = false;
     }
     if(!root.lookupValue("run_as_root", m_runAsRoot)) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't define run_as_root!";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't define run_as_root!";
         m_runAsRoot = false;
     }
     if(!root.lookupValue("wait_for_signal", m_waitForSignal)) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't define wait_for_signal!";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't define wait_for_signal!";
         m_waitForSignal = false;
     }
     if(!root.lookupValue("restart_on_crash", m_restartOnCrash)) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't define restart_on_crash!";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't define restart_on_crash!";
         m_restartOnCrash = false;
     }
     if(!root.lookupValue("restart_on_exit", m_restartOnExit)) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't define restart_on_exit!";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't define restart_on_exit!";
         m_restartOnExit = false;
     }
 
     if(!root.exists("execution")) {
-        BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't have an execution group. It can therefore not be executed.";
+        BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't have an execution group. It can therefore not be executed.";
     } else {
         Setting &execution = root["execution"];
 
         if(!execution.lookupValue("executable", m_executable))
-            BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't have an executable. It can therefore not be executed.";
+            BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't have an executable. It can therefore not be executed.";
 
         try {
             Setting &args = execution["arguments"];
             m_args.resize(args.getLength() + 1);
-            std::size_t i = 1;
             for(std::size_t i = 0; i < args.getLength(); ++i) {
                 m_args[i] = *(args[i]);
-                ++i;
             }
         }
         catch (const SettingNotFoundException &e) {
-            BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't specify any arguments. This doesn't compede with execution.";
+            BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't specify any arguments. This doesn't compede with execution.";
+        }
+        try {
+            Setting &envvars = execution["envvars"];
+            m_envvars.resize(envvars.getLength());
+            for(std::size_t i = 0; i < envvars.getLength(); ++i) {
+                m_envvars[i] = envvars[i].c_str();
+            }
+        }
+        catch (const SettingNotFoundException &e) {
+            BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't specify any envvars. This doesn't compede with execution.";
         }
 
         if(!execution.lookupValue("working_directory", m_workingDir))
-            BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't specify an working directory. It will be executed in it's root folder.";
+            BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't specify an working directory. It will be executed in it's root folder.";
 
         if(!execution.lookupValue("uid", m_uid))
-            BOOST_LOG_TRIVIAL(warning) << "App config file \"" << configPath << "\" doesn't specify an uid. It will be executed with the default uid for apps: " << m_uid;
+            BOOST_LOG_SEV(m_log, L_WARN) << "App config file \"" << configPath << "\" doesn't specify an uid. It will be executed with the default uid for apps: " << m_uid;
     }
     return true;
 }
@@ -157,15 +170,62 @@ void App::start(bool restartIfRunning)
 {
     if(isRunning()) {
         if(restartIfRunning) {
-            BOOST_LOG_TRIVIAL(info) << "App \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\" is already running and will be restarted.";
+            BOOST_LOG_SEV(m_log, L_INFO) << "App \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\" is already running and will be restarted.";
             stop();
         } else {
-            BOOST_LOG_TRIVIAL(info) << "App \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\" is already running and will not be restarted!";
+            BOOST_LOG_SEV(m_log, L_INFO) << "App \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\" is already running and will not be restarted!";
             return;
         }
     }
 
-    BOOST_LOG_TRIVIAL(info) << "Starting app \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\".";
+    BOOST_LOG_SEV(m_log, L_INFO) << "Starting app \"" << m_name << "\" with executable \"" << m_path << "/" << m_executable << "\".";
+    
+    // Arguments and environment variables.
+    m_args[0] = (m_path + "/" + m_executable).c_str();
+    char **args = new char*[m_args.size() + 1];
+    for(std::size_t i = 0; i < m_args.size(); ++i) {
+        args[i] = new char[m_args[i].length()];
+        std::memcpy(args[i], m_args[i].c_str(), m_args[i].length());
+    }
+    args[m_args.size()] = nullptr;
+    
+    std::size_t envpSize = 0;
+    while(m_envp[envpSize] != nullptr) {
+        ++envpSize;
+    }
+    
+    envpSize += m_envvars.size() + 2;
+    
+    char **env = new char*[envpSize + 1];
+    for(std::size_t i = 0; i < envpSize; ++i) {
+        
+        if(i == 0) {
+            // The pidfile envvar should always be set.
+            std::string pidfile_envvar = "PIGA_DAEMON_PIDFILE_PATH=";
+            pidfile_envvar += Daemon::getPidfilePath();
+            env[i] = new char[pidfile_envvar.length()];
+            std::memcpy(env[i], pidfile_envvar.c_str(), pidfile_envvar.length());
+        }
+        else if(i == 1) {
+            // The XDG_RUNTIME_DIR should be set.
+            std::string runtime_envvar = "XDG_RUNTIME_DIR=";
+            if(m_runAsRoot)
+                runtime_envvar += "/run/user/0";
+            else 
+                runtime_envvar += "/run/user/" + std::to_string(m_uid);
+            env[i] = new char[runtime_envvar.length()];
+            std::memcpy(env[i], runtime_envvar.c_str(), runtime_envvar.length());
+        } else if(i < m_envvars.size() + 2) {
+            // Copy the envvars vector.
+            env[i] = new char[m_envvars[i - 2].length()];
+            std::memcpy(env[i], m_envvars[i - 2].c_str(), m_envvars[i - 2].length());
+        } else {
+            // Assign the env variables from outside.
+            env[i] = m_envp[i - m_envvars.size() - 2];
+        }
+        
+    }
+    env[envpSize] = nullptr;
     pid_t pid = fork();
     if(pid == 0) {
         // Child Process
@@ -174,7 +234,7 @@ void App::start(bool restartIfRunning)
         if(!m_runAsRoot)
 			setuid(m_uid);
 
-        setsid();
+        //setsid();
 
         // Set the working directory.
         if(m_workingDir[0] != '/') {
@@ -185,22 +245,14 @@ void App::start(bool restartIfRunning)
             boost::filesystem::current_path(m_workingDir);
         }
 
-        m_args[0] = (m_path + "/" + m_executable).c_str();
-        char **args = new char*[m_args.size() + 1];
-        for(std::size_t i = 0; i < m_args.size(); ++i) {
-            args[i] = new char[m_args[i].length()];
-            std::memcpy(args[i], m_args[i].c_str(), m_args[i].length());
-        }
-        args[m_args.size()] = nullptr;
 
         if(m_executable[0] == '.') {
-			execvp((m_path + m_executable).c_str(), args);
+			execvpe((m_path + m_executable).c_str(), args, env);
         } else {
-			execvp(m_executable.c_str(), args);
+			execvpe(m_executable.c_str(), args, env);
         }
 
-
-        BOOST_LOG_TRIVIAL(error) << "Error while trying to run \"" << m_executable << "\". : " << strerror(errno);
+        BOOST_LOG_SEV(m_log, L_ERROR) << "Error while trying to run \"" << m_executable << "\". : " << strerror(errno);
 
         for(std::size_t i = 0; i < m_args.size(); ++i) {
             delete[] args[i];
@@ -216,8 +268,17 @@ void App::start(bool restartIfRunning)
 
         m_pid = pid;
     } else if(pid < 0) {
-        BOOST_LOG_TRIVIAL(error) << "Could not fork() for app \"" << m_name << "\".";
+        BOOST_LOG_SEV(m_log, L_ERROR) << "Could not fork() for app \"" << m_name << "\".";
     }
+    // Delete the allocated memory for the exec call.
+    for(std::size_t i = 0; i < m_args.size(); ++i) {
+        delete[] args[i];
+    }
+    delete[] args;
+    for(std::size_t i = 0; i < m_args.size() + 2; ++i) {
+        delete[] env[i];
+    }
+    delete[] env;
     m_waitpid_counter = 0;
 }
 void App::stop()
@@ -227,10 +288,10 @@ void App::stop()
     waitpid(m_pid, &status, WUNTRACED | WCONTINUED);
     if(WIFEXITED(status)) {
         m_running = false;
-        BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" exited with status \"" << WEXITSTATUS(status) << "\"";
+        BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" exited with status \"" << WEXITSTATUS(status) << "\"";
     } else if(WIFSIGNALED(status)) {
         m_running = false;
-        BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" killed by signal \"" << WTERMSIG(status) << "\"";
+        BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" killed by signal \"" << WTERMSIG(status) << "\"";
     }
 }
 bool App::isRunning() const
@@ -283,7 +344,7 @@ void App::update()
                 return;
             case -1:
                 // An error occured.
-                BOOST_LOG_TRIVIAL(error) << "Waitpid on pid " << m_pid << " returned an error!";
+                BOOST_LOG_SEV(m_log, L_ERROR) << "Waitpid on pid " << m_pid << " returned an error!";
                 break;
             default:
                 // This indicates success! Continue to the signal handling.
@@ -295,20 +356,20 @@ void App::update()
         // Handle the result
         if(WIFEXITED(status)) {
             m_running = false;
-            BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" exited with status \"" << WEXITSTATUS(status) << "\"";
+            BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" exited with status \"" << WEXITSTATUS(status) << "\"";
 
             handle_exit_code_and_restart(this, WEXITSTATUS(status));
         } else if(WIFSIGNALED(status)) {
             m_running = false;
-            BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" killed by signal \"" << WTERMSIG(status) << "\"";
+            BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" killed by signal \"" << WTERMSIG(status) << "\"";
 
             handle_exit_code_and_restart(this, WEXITSTATUS(status));
         } else if(WIFSTOPPED(status)) {
             m_stopped = true;
-            BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" stopped by signal \"" << WSTOPSIG(status) << "\"";
+            BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" stopped by signal \"" << WSTOPSIG(status) << "\"";
         } else if(WIFCONTINUED(status)) {
             m_stopped = false;
-            BOOST_LOG_TRIVIAL(debug) << "App \"" << m_name << "\" continued.";
+            BOOST_LOG_SEV(m_log, L_DEBUG) << "App \"" << m_name << "\" continued.";
         }
     }
 }

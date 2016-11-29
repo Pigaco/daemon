@@ -44,7 +44,12 @@ public:
     
     std::string web(const std::string &path, std::string *contentType, const std::string &token);
     
-    int64_t chunkedResponseCallback(void *cls, uint64_t pos, char *buf, size_t max);
+#if MHD_VERSION < 0x00095102
+int 
+#else
+int64_t
+#endif
+    chunkedResponseCallback(void *cls, uint64_t pos, char *buf, size_t max);
     
     static int answer_to_connection (void *cls, struct MHD_Connection *connection,
                                      const char *url,
