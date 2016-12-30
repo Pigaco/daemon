@@ -275,7 +275,7 @@ void App::start(bool restartIfRunning)
         delete[] args[i];
     }
     delete[] args;
-    for(std::size_t i = 0; i < m_args.size() + 2; ++i) {
+    for(std::size_t i = 0; i < m_envvars.size() + 2; ++i) {
         delete[] env[i];
     }
     delete[] env;

@@ -51,8 +51,9 @@ install(TARGETS piga_daemon
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT PigaDaemonConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake)
 
-# Install the service file.
+# Install the service file (TODO: This is a hack.)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION /etc/systemd/system/)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/piga-daemon.service DESTINATION /etc/systemd/system/multi-user.target.wants)
 
 add_executable(pigadaemon
     ${SRC}/main.cpp)
